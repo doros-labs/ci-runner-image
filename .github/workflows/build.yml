@@ -1,10 +1,11 @@
 # Builds the runner image and publishes it to GHCR.
 #
 #   smoke (pull requests and main): content denylist, build WITHOUT pushing, no registry
-#     login, no secret; then the smoke check inside the hardened container.
+#     login, no secret; then the smoke check inside the hardened container (no network) and
+#     the native-addon check (same container flags, but with network: npm ci needs the registry).
 #   build (pushes to main only): build again and push with the job's own GITHUB_TOKEN
-#     (packages: write on this job only), then pull the pushed digest and run the same smoke
-#     on it. The digest goes to the run summary; consumers pin that digest, never a tag.
+#     (packages: write on this job only), then pull the pushed digest and run the same two
+#     checks on it. The digest goes to the run summary; consumers pin that digest, never a tag.
 #
 # This repository is public: no job checks out or tests a private repository, and no job
 # uses pull_request_target. Third-party actions are pinned by commit SHA.
@@ -59,6 +60,8 @@ jobs:
           tags: ci-runner-smoke:local
       - name: Smoke in the hardened container
         run: bash tools/run-smoke.sh ci-runner-smoke:local
+      - name: Native addon with a prebuilt binary installs (npm ci) and loads
+        run: bash tools/run-addon-check.sh ci-runner-smoke:local
       - name: No sudo even without no-new-privileges
         run: |
           set +e
@@ -72,10 +75,23 @@ jobs:
           if [ "$rc" -ge 125 ]; then echo "docker run failed (rc $rc)"; exit 1; fi
           if [ "$rc" -eq 3 ]; then echo "no sudo binary for uid 1001"; else echo "sudo refuses uid 1001 (rc $rc)"; fi
       - name: Size and package list
+        env:
+          OWNER: ${{ github.repository_owner }}
         run: |
           set -euo pipefail
+          # Compared with the last published image (the latest tag moves only after a main build
+          # passed its smoke), so a change's size cost shows in its own run.
+          new="$(docker image inspect ci-runner-smoke:local --format '{{.Size}}')"
+          prev_ref="ghcr.io/${OWNER}/${IMAGE_NAME}:latest"
+          if docker pull -q "${prev_ref}" >/dev/null 2>&1; then
+            prev="$(docker image inspect "${prev_ref}" --format '{{.Size}}')"
+            size_line="$(awk -v n="${new}" -v p="${prev}" -v r="${prev_ref}" 'BEGIN { printf "image size: %.2f GB (%.0f bytes); %s: %.2f GB (%.0f bytes); delta %+.1f MB", n/1e9, n, r, p/1e9, p, (n-p)/1e6 }')"
+          else
+            size_line="$(awk -v n="${new}" -v r="${prev_ref}" 'BEGIN { printf "image size: %.2f GB (%.0f bytes); could not pull %s (none published yet, or not public), no comparison", n/1e9, n, r }')"
+          fi
+          echo "${size_line}"
           {
-            docker image inspect ci-runner-smoke:local --format '{{.Size}}' | awk '{printf "image size: %.2f GB\n", $1/1e9}'
+            echo "${size_line}"
             echo "<details><summary>dpkg packages</summary>"; echo; echo '```'
             docker run --rm --entrypoint dpkg-query ci-runner-smoke:local -W -f '${Package} ${Version}\n'
             echo '```'; echo "</details>"
@@ -117,6 +133,7 @@ jobs:
           ref="ghcr.io/${OWNER}/${IMAGE_NAME}@${DIGEST}"
           docker pull "${ref}"
           bash tools/run-smoke.sh "${ref}"
+          bash tools/run-addon-check.sh "${ref}"
       - name: Tag the smoked digest (latest, sha-<commit>)
         env:
           DIGEST: ${{ steps.build.outputs.digest }}

@@ -1,0 +1,9 @@
+{
+  "name": "addon-check",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Installs one native addon that ships prebuilt binaries, the way a project install does (npm ci), and loads it.",
+  "dependencies": {
+    "better-sqlite3": "13.0.3"
+  }
+}

@@ -5,8 +5,9 @@ filesystem paths, IP addresses, local host names, e-mail addresses, issue keys, 
 words, or common credential shapes. A short allowlist covers standard names that share the
 issue-key shape (SHA-256, UTF-8, ISO-8601, TLS-1).
 
-Lines that define the patterns below carry the marker `pattern-def` and are the only lines
-this file skips, so the check covers the rest of this file too.
+Lines that define the patterns below (a re.compile call) carry the marker `pattern-def` and
+are the only lines this file skips; the marker on any other line skips nothing, so the check
+covers the rest of this file too.
 
 Usage: python3 -B tools/denylist-check.py [root]   (default: current directory)
 """
@@ -50,7 +51,7 @@ def main():
             findings.append(f"{rel}: unreadable ({err})")
             continue
         for n, line in enumerate(lines, 1):
-            if MARKER in line and rel == "tools/denylist-check.py":
+            if MARKER in line and "re.compile(" in line and rel == "tools/denylist-check.py":
                 continue
             checked = ALLOW.sub("", line)
             for label, rx in PATTERNS:

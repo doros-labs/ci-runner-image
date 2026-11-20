@@ -11,10 +11,11 @@
 # the runner user gets no sudo. Nothing host-specific (addresses, tokens, names) is baked in;
 # a host passes its own values at run time.
 
-# Node major line this image ships; the smoke check asserts it. The first build runs from
-# the tag, and its summary prints the digest to pin here in a follow-up commit.
+# Node major line this image ships; the smoke check asserts it. The Node stage is pinned by
+# digest (the node:22-slim index, as the build summary's "Base image digests" printed it);
+# a bump changes NODE_MAJOR and the digest together.
 ARG NODE_MAJOR=22
-FROM node:${NODE_MAJOR}-slim AS node
+FROM node:${NODE_MAJOR}-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee AS node
 
 # GitHub's runner image: Ubuntu, a `runner` user with uid 1001, the runner in /home/runner.
 FROM ghcr.io/actions/actions-runner:2.337.0@sha256:e5496277be5d09bc968b3d64911b74e219ac4a3f2edce956a3ecf9271bea1ef4

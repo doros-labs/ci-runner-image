@@ -74,14 +74,21 @@ ok "runner ${ver} starts from ${copy}"
 
 # 4. The real entrypoint, end to end, on a scratch jit/work pair inside the work volume:
 #    it must consume (delete) the config and start the runner from its own copy.
+#    HOME and the caches point into the scratch work dir, the way a host points them into
+#    /work: the entrypoint's wipe empties that dir, so afterwards they exist only if the
+#    entrypoint created them again.
 ep="${work_dir}/entrypoint-check"
 rm -rf "${ep}"
 mkdir -p "${ep}/jit" "${ep}/work"
 printf '%s' "${fake_config}" > "${ep}/jit/jitconfig"
-JIT_DIR="${ep}/jit" WORK_DIR="${ep}/work" timeout 150 /usr/local/bin/ci-runner-entrypoint >"${ep}/entrypoint.log" 2>&1 || true
+ep_dirs=("${ep}/work/home" "${ep}/work/.cache" "${ep}/work/.corepack" "${ep}/work/.npm")
+HOME="${ep_dirs[0]}" XDG_CACHE_HOME="${ep_dirs[1]}" COREPACK_HOME="${ep_dirs[2]}" npm_config_cache="${ep_dirs[3]}" \
+  JIT_DIR="${ep}/jit" WORK_DIR="${ep}/work" timeout 150 /usr/local/bin/ci-runner-entrypoint >"${ep}/entrypoint.log" 2>&1 || true
 [ ! -e "${ep}/jit/jitconfig" ] || { cat "${ep}/entrypoint.log"; fail "entrypoint did not delete the consumed jitconfig"; }
 [ -f "${ep}/work/runner/.runner" ] || { cat "${ep}/entrypoint.log"; fail "entrypoint's runner wrote no .runner in ${ep}/work/runner"; }
-[ -d "${HOME}" ] || fail "entrypoint did not leave HOME (${HOME}) in place"
-ok "entrypoint consumed the config and started the runner from its copy"
+for d in "${ep_dirs[@]}"; do
+  [ -d "${d}" ] || { cat "${ep}/entrypoint.log"; fail "entrypoint did not create ${d} again after its wipe"; }
+done
+ok "entrypoint consumed the config, created HOME and the caches again, and started the runner from its copy"
 
 echo "ci-runner-smoke: all checks passed"

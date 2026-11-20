@@ -33,7 +33,7 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends \
        ca-certificates curl git python3 ffmpeg zip unzip file procps gawk tar gzip xz-utils \
        tmux jq sqlite3 \
-  && apt-get purge -y sudo \
+  && SUDO_FORCE_REMOVE=yes apt-get purge -y sudo \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --from=node /usr/local/bin/node /usr/local/bin/node

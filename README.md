@@ -10,8 +10,9 @@ A general-purpose, ephemeral self-hosted GitHub Actions runner image for linux/a
 - GitHub's runner image as the base (pinned release + digest). The runtime user is uid 1001.
 - Node.js (major line in the Dockerfile's `NODE_MAJOR`) from the official Node image.
 - Python 3 with its standard library.
-- curl, git, ffmpeg, zip/unzip, file, procps, gawk, tar/gzip/xz, tmux, jq, sqlite3.
-- No compiler and no sudo. No addresses, tokens or other host-specific values.
+- curl, git, ffmpeg, zip/unzip, file, procps, gawk, tar/gzip/xz, tmux, jq, sqlite3, make.
+- The headers of the shipped Node build in `/usr/local/include/node`, with `npm_config_nodedir=/usr/local`. Together with make this lets npm's implicit `node-gyp rebuild` finish for addons that ship a prebuilt binary (its binding.gyp then compiles nothing), without a header download.
+- No compiler and no sudo: an addon without a prebuilt binary for this platform does not build here. No addresses, tokens or other host-specific values.
 
 ## How it runs
 - The container runs one job and exits (`ci-runner-entrypoint`).
@@ -35,4 +36,5 @@ Recommended container flags. The smoke check uses exactly these. A host normally
 
 ## Checks
 - `tools/denylist-check.py`: fails the build on internal-looking or secret-looking content: private-style paths, IP addresses, local host names, e-mail addresses, issue keys, accented words, credential shapes.
-- `ci-runner-smoke`: user, read-only root (a write probe plus the mount options), tools, runner start, and the real entrypoint end to end. It runs in the hardened container before the push and again on the pushed digest; the tags move only after that.
+- `ci-runner-smoke`: user, read-only root (a write probe plus the mount options), tools, runner start, the real entrypoint end to end, and the native-addon prerequisites (make, glibc 2.34 or newer, matching Node headers, an offline node-gyp configure and build of a target that compiles nothing, no C/C++ compiler on PATH). It runs in the hardened container before the push and again on the pushed digest; the tags move only after that.
+- `tools/run-addon-check.sh`: the same container flags with network, `npm ci` of `tools/addon-check` (better-sqlite3, which ships prebuilt binaries), then loads it and opens an in-memory database. It runs next to the smoke check, on both images.

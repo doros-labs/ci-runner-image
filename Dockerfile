@@ -7,9 +7,9 @@
 # /jit for the one-shot config). The container never needs a Docker socket.
 #
 # Contents: the GitHub runner (from GitHub's own runner image), Node.js from the official
-# Node image, Python 3 and a set of common command-line tools. No compiler is added, and
-# the runner user gets no sudo. Nothing host-specific (addresses, tokens, names) is baked in;
-# a host passes its own values at run time.
+# Node image (with its headers), Python 3, make and a set of common command-line tools. No
+# compiler is added, and the runner user gets no sudo. Nothing host-specific (addresses,
+# tokens, names) is baked in; a host passes its own values at run time.
 
 # Node major line this image ships; the smoke check asserts it. The Node stage is pinned by
 # digest (the node:22-slim index, as the build summary's "Base image digests" printed it);
@@ -28,17 +28,25 @@ USER root
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Command-line tools for typical Node/Python test suites. ffmpeg without recommends.
+# make (no compiler): npm runs an implicit `node-gyp rebuild` for every package with a
+# binding.gyp, also when the package ships a prebuilt binary and its binding.gyp then builds
+# nothing; that rebuild still calls make. The smoke check asserts make is there and no C/C++
+# compiler is.
 # sudo is purged with its configuration: the runner user gets no privilege escalation.
 # The smoke check asserts that sudo is absent.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
        ca-certificates curl git python3 ffmpeg zip unzip file procps gawk tar gzip xz-utils \
-       tmux jq sqlite3 \
+       tmux jq sqlite3 make \
   && SUDO_FORCE_REMOVE=yes apt-get purge -y sudo \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
+# The headers of this exact Node build, for node-gyp: with npm_config_nodedir set, node-gyp
+# configures against them and never downloads a header tarball.
+COPY --from=node /usr/local/include/node /usr/local/include/node
+ENV npm_config_nodedir=/usr/local
 RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
   && ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 

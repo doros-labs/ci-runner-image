@@ -91,4 +91,39 @@ for d in "${ep_dirs[@]}"; do
 done
 ok "entrypoint consumed the config, created HOME and the caches again, and started the runner from its copy"
 
+# 5. Native addons that ship a prebuilt binary install without a compiler. npm runs an
+#    implicit `node-gyp rebuild` for every package with a binding.gyp; when an addon uses its
+#    prebuilt binary (better-sqlite3 does), its binding.gyp builds nothing (a target of type
+#    none), but node-gyp still configures against the Node headers and runs make. This section runs the same
+#    configure and build on such a target, offline (the smoke container has no network), so
+#    the headers must come from npm_config_nodedir, never from a download.
+command -v make >/dev/null || fail "missing tool: make"
+make_ver="$(make --version 2>&1)" || fail "make --version failed: ${make_ver}"
+for compiler in cc c++ gcc g++; do
+  if command -v "${compiler}" >/dev/null; then fail "a C/C++ compiler is on PATH: ${compiler} ($(command -v "${compiler}"))"; fi
+done
+# better-sqlite3's prebuilt linux-x64 binary (the addon tools/addon-check installs) needs GLIBC_2.34.
+ldd_out="$(ldd --version 2>&1)" || fail "ldd --version failed: ${ldd_out}"
+glibc="$(awk 'NR == 1 { print $NF }' <<<"${ldd_out}")"
+[[ "${glibc}" =~ ^[0-9]+\.[0-9]+$ ]] || fail "no glibc version in the first line of ldd --version: ${ldd_out%%$'\n'*}"
+[ "$(printf '%s\n' 2.34 "${glibc}" | sort -V | head -1)" = "2.34" ] || fail "glibc ${glibc} is older than 2.34"
+nodedir="${npm_config_nodedir:?image must set npm_config_nodedir}"
+hdr="${nodedir}/include/node"
+[ -f "${hdr}/common.gypi" ] && [ -f "${hdr}/node_version.h" ] && [ -f "${hdr}/node_api.h" ] \
+  || fail "no Node headers in ${hdr} (common.gypi, node_version.h, node_api.h)"
+hdr_ver="$(awk '$1 == "#define" && $2 ~ /^NODE_(MAJOR|MINOR|PATCH)_VERSION$/ { v = v (v == "" ? "" : ".") $3 } END { print v }' "${hdr}/node_version.h")"
+[ "v${hdr_ver}" = "$(node --version)" ] || fail "headers in ${hdr} are ${hdr_ver}, node is $(node --version)"
+node_gyp="${NODE_GYP:-/usr/local/lib/node_modules/npm/node_modules/node-gyp/bin/node-gyp.js}"
+[ -f "${node_gyp}" ] || fail "npm's node-gyp not found at ${node_gyp}"
+gyp_dir="${work_dir}/node-gyp-check"
+rm -rf "${gyp_dir}"
+mkdir -p "${gyp_dir}"
+echo "{ 'targets': [ { 'target_name': 'prebuilt_only', 'type': 'none' } ] }" > "${gyp_dir}/binding.gyp"
+(cd "${gyp_dir}" && node "${node_gyp}" configure >"${gyp_dir}/configure.log" 2>&1) \
+  || { cat "${gyp_dir}/configure.log"; fail "offline node-gyp configure against ${nodedir} failed"; }
+[ -f "${gyp_dir}/build/Makefile" ] || { cat "${gyp_dir}/configure.log"; fail "node-gyp configure wrote no build/Makefile"; }
+(cd "${gyp_dir}" && node "${node_gyp}" build >"${gyp_dir}/build.log" 2>&1) \
+  || { cat "${gyp_dir}/build.log"; fail "node-gyp build (make) of a target that compiles nothing failed"; }
+ok "${make_ver%%$'\n'*}, glibc ${glibc}, Node ${hdr_ver} headers in ${hdr}; offline node-gyp configure and build of a no-compile target; no C/C++ compiler"
+
 echo "ci-runner-smoke: all checks passed"

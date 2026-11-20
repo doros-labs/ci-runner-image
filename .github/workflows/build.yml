@@ -62,13 +62,15 @@ jobs:
       - name: No sudo even without no-new-privileges
         run: |
           set +e
-          docker run --rm --user 1001:1001 --entrypoint sh ci-runner-smoke:local -c 'command -v sudo >/dev/null && sudo -n true'
+          docker run --rm --user 1001:1001 --entrypoint sh ci-runner-smoke:local -c 'command -v sudo >/dev/null || exit 3; sudo -n true'
           rc=$?
           set -e
-          # 0 = sudo works; 125-127 = docker itself or the shell failed, not a verdict on sudo.
+          # 0 = sudo works; 3 = no sudo binary (dash's `command -v` itself returns 127 for a missing
+          # command, so absence gets its own code); 125-127 = docker itself or the shell failed, not a
+          # verdict on sudo; any other code = sudo is there but refuses uid 1001.
           if [ "$rc" -eq 0 ]; then echo "sudo works for uid 1001"; exit 1; fi
           if [ "$rc" -ge 125 ]; then echo "docker run failed (rc $rc)"; exit 1; fi
-          echo "no sudo for uid 1001 (rc $rc)"
+          if [ "$rc" -eq 3 ]; then echo "no sudo binary for uid 1001"; else echo "sudo refuses uid 1001 (rc $rc)"; fi
       - name: Size and package list
         run: |
           set -euo pipefail

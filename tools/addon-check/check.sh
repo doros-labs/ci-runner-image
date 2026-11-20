@@ -21,6 +21,11 @@ mkdir -p "${dir}"
 cp "${src}/package.json" "${src}/package-lock.json" "${dir}/"
 cd "${dir}"
 
+# Shown, not enforced here (the smoke check fails on any of them): the install below must
+# pass without a C/C++ compiler.
+compilers="$(for c in cc c++ gcc g++; do command -v "${c}" || true; done | tr '\n' ' ')"
+echo "addon-check: compilers on PATH (cc c++ gcc g++): ${compilers:-none}"
+
 npm ci --no-audit --no-fund >npm-ci.log 2>&1 || { cat npm-ci.log; fail "npm ci failed"; }
 cat npm-ci.log
 pkg="node_modules/better-sqlite3"

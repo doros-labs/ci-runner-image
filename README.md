@@ -9,7 +9,7 @@ A general-purpose, ephemeral self-hosted GitHub Actions runner image for linux/a
 ## What is inside
 - GitHub's runner image as the base (pinned release + digest). The runtime user is uid 1001.
 - Node.js (major line in the Dockerfile's `NODE_MAJOR`) from the official Node image.
-- Python 3 with its standard library.
+- Python 3 with its standard library and the venv module (python3-venv, with ensurepip).
 - curl, git, ffmpeg, zip/unzip, file, procps, gawk, tar/gzip/xz, tmux, jq, sqlite3, make, iproute2 (ss).
 - The headers of the shipped Node build in `/usr/local/include/node`, with `npm_config_nodedir=/usr/local`. Together with make this lets npm's implicit `node-gyp rebuild` finish for addons that ship a prebuilt binary (its binding.gyp then compiles nothing), without a header download.
 - No compiler and no sudo: an addon without a prebuilt binary for this platform does not build here. No addresses, tokens or other host-specific values.

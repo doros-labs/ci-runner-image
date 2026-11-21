@@ -32,12 +32,13 @@ ENV DEBIAN_FRONTEND=noninteractive
 # binding.gyp, also when the package ships a prebuilt binary and its binding.gyp then builds
 # nothing; that rebuild still calls make. The smoke check asserts make is there and no C/C++
 # compiler is.
+# iproute2 for ss: test suites probe listening ports with it.
 # sudo is purged with its configuration: the runner user gets no privilege escalation.
 # The smoke check asserts that sudo is absent.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
        ca-certificates curl git python3 ffmpeg zip unzip file procps gawk tar gzip xz-utils \
-       tmux jq sqlite3 make \
+       tmux jq sqlite3 make iproute2 \
   && SUDO_FORCE_REMOVE=yes apt-get purge -y sudo \
   && rm -rf /var/lib/apt/lists/*
 

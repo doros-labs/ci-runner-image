@@ -126,4 +126,16 @@ echo "{ 'targets': [ { 'target_name': 'prebuilt_only', 'type': 'none' } ] }" > "
   || { cat "${gyp_dir}/build.log"; fail "node-gyp build (make) of a target that compiles nothing failed"; }
 ok "${make_ver%%$'\n'*}, glibc ${glibc}, Node ${hdr_ver} headers in ${hdr}; offline node-gyp configure and build of a no-compile target; no C/C++ compiler"
 
+# 6. Tools test suites call directly: ss (iproute2) for port probes, and python3's venv module with
+#    ensurepip, so a suite can build a throwaway virtual environment with a working pip (offline: the
+#    pip wheel ships with ensurepip).
+command -v ss >/dev/null || fail "missing tool: ss (iproute2)"
+ss_ver="$(ss -V 2>&1)" || fail "ss -V failed: ${ss_ver}"
+venv="${work_dir}/venv-check"
+rm -rf "${venv}"
+venv_out="$(python3 -m venv "${venv}" 2>&1)" || fail "python3 -m venv failed (no venv / ensurepip in this python): ${venv_out}"
+pip_out="$("${venv}/bin/python" -m pip --version 2>&1)" || fail "the new venv has no working pip: ${pip_out}"
+rm -rf "${venv}"
+ok "${ss_ver}; python3 -m venv with ${pip_out%% from *}"
+
 echo "ci-runner-smoke: all checks passed"
